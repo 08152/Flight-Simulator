@@ -74,7 +74,24 @@ function init() {
   scene.add(ground);
 
   // GLB LADEN
-const loader = new GLTFLoader();
+loader.load("./1.glb", function (gltf) {
+
+    model = gltf.scene;
+    scene.add(model);
+
+    // 🔥 AUTOMATISCH ZENTRIEREN
+    const box = new THREE.Box3().setFromObject(model);
+    const center = box.getCenter(new THREE.Vector3());
+
+    model.position.sub(center);
+
+    // 🔥 KAMERA RICHTIG SETZEN
+    camera.position.set(0, 2, 6);
+    camera.lookAt(0, 0, 0);
+
+    hud.innerHTML = "✔ Modell geladen";
+
+});
 
   loader.load(
     "./1.glb",
