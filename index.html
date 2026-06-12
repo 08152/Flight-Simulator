@@ -2,22 +2,21 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<title>3D Flight Sim - Custom Map Version</title>
+<title>3D Flight Sim - Meine GLBs</title>
 <style>
   body { margin: 0; overflow: hidden; background: #000; font-family: Arial, sans-serif; }
   #hud {
     position: absolute; top: 10px; left: 10px;
-    color: white; background: rgba(0,0,0,0.7);
+    color: white; background: rgba(0,0,0,0.8);
     padding: 15px; z-index: 10; border-radius: 5px;
-    pointer-events: none;
+    pointer-events: none; min-width: 250px;
   }
-  .status-line { margin: 3px 0; font-size: 13px; }
+  .status-line { margin: 4px 0; font-size: 13px; font-weight: bold; }
   .loading { color: #ffcc00; }
   .success { color: #00ff00; }
   .error { color: #ff3333; }
 </style>
 
-<!-- Unverzichtbar: Lädt die Three.js-Bibliotheken korrekt ohne Absturz -->
 <script type="importmap">
   {
     "imports": {
@@ -33,168 +32,176 @@
   <strong>Steuerung:</strong> W/S (Nase) | A/D (Rollen) | Leertaste (Gas)<br>
   <hr style="border:0; border-top:1px solid rgba(255,255,255,0.3); margin:5px 0;">
   
-  <div class="status-line">Flugzeug: <span id="statusPlane" class="loading">Lade 1.glb...</span></div>
-  <div class="status-line">Weltkarte: <span id="statusMap" class="loading">Lade map.glb...</span></div>
+  <!-- Das HUD zeigt dir genau, was mit deinen Dateien passiert -->
+  <div class="status-line">Flugzeug (1.glb): <span id="statusPlane" class="loading">Warte auf Download...</span></div>
+  <div class="status-line">Weltkarte (map.glb): <span id="statusMap" class="loading">Warte auf Download...</span></div>
   
   <hr style="border:0; border-top:1px solid rgba(255,255,255,0.3); margin:5px 0;">
   <strong>Flugzeug-Position:</strong><br>
-  X: <span id="posX">0.0</span> | Y: <span id="posY">0.0</span> | Z: <span id="posZ">0.0</span><br>
-  Nase (Pitch): <span id="rotX">0.0</span>° | Rollen: <span id="rotZ">0.0</span>°
+  X: <span id="posX">0.0</span> | Y: <span id="posY">0.0</span> | Z: <span id="posZ">0.0</span>
 </div>
 
 <script type="module">
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-// ==========================================
-// KAMERA-PERSPEKTIVE (Vogelperspektive von weit oben)
-// ==========================================
-const CAM_HOEHE   = 50;  // Wie weit über dem Flugzeug? (Erhöhen für mehr Abstand)
-const CAM_ABSTAND = -35; // Wie weit hinter dem Flugzeug? (Negativ = dahinter)
-const CAM_SEITE   = 0;   // Seitlicher Versatz
+// ========================================================
+// 1. ANPASSUNG FÜR DEINE GLBS (Hier Werte ändern!)
+// ========================================================
+const PLANE_SCALE = 1;  // Wenn dein Flugzeug unsichtbar/zu klein ist, erhöhe auf 5 oder 10!
+const MAP_SCALE   = 1;  // Wenn deine Map zu klein ist, erhöhe auf 10, 50 oder 100!
 
-// 1. SZENE, KAMERA & RENDERER SETUP
+const CAM_HOEHE   = 30; // Höhe der Kamera über dem Flugzeug
+const CAM_ABSTAND = -25; // Abstand hinter dem Flugzeug
+
+// Szene Setup
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x53b4ff); // Blauer Himmel
-scene.fog = new THREE.FogExp2(0x53b4ff, 0.002); // Sehr leichter Nebel für extreme Weitsicht
+scene.background = new THREE.Color(0x53b4ff); // Himmel MUSS blau sein, nicht schwarz
+scene.fog = new THREE.FogExp2(0x53b4ff, 0.001);
 
-const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 5000);
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 10000);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// Starke Beleuchtung für die geladenen GLB-Modelle
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
+// EXTREM STARKE BELEUCHTUNG (Verhindert, dass geladene Modelle schwarz aussehen)
+const ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
 scene.add(ambientLight);
 
-const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
-dirLight.position.set(100, 300, 100);
-scene.add(dirLight);
+const dirLight1 = new THREE.DirectionalLight(0xffffff, 1.5);
+dirLight1.position.set(500, 1000, 500);
+scene.add(dirLight1);
+
+const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.5);
+dirLight2.position.set(-500, 400, -500);
+scene.add(dirLight2);
 
 const loader = new GLTFLoader();
 
-// ==========================================
-// 2. MAP LOADER (Lädt deine map.glb)
-// ==========================================
+// ========================================================
+// 2. DEINE MAP LADEN (map.glb)
+// ========================================================
 let customMap = null;
+const statusMapEl = document.getElementById("statusMap");
 
 loader.load(
   './map.glb',
   function (gltf) {
     customMap = gltf.scene;
+    customMap.scale.set(MAP_SCALE, MAP_SCALE, MAP_SCALE);
+    customMap.position.set(0, 0, 0);
     
-    // Falls deine map.glb im Spiel zu klein/groß ist, passe diese Skalierung an:
-    customMap.scale.set(1, 1, 1); 
-    customMap.position.set(0, 0, 0); // Liegt im Zentrum der Welt
-    
+    // Erzwinge Texturen-Sichtbarkeit (Fix gegen schwarze Texturen)
+    customMap.traverse((child) => {
+      if (child.isMesh) {
+        child.material.depthWrite = true;
+        if(child.material.map) child.material.map.anisotropy = 16;
+      }
+    });
+
     scene.add(customMap);
-    
-    const statusMapEl = document.getElementById("statusMap");
-    statusMapEl.innerText = "✔ map.glb geladen!";
+    statusMapEl.innerText = "✔ Erfolgreich im Spiel!";
     statusMapEl.className = "success";
   },
-  undefined,
+  function (xhr) {
+    if (xhr.total > 0) {
+      statusMapEl.innerText = `Lade: ${Math.round((xhr.loaded / xhr.total) * 100)}%`;
+    }
+  },
   function (error) {
-    console.error("Fehler beim Laden der Map:", error);
-    const statusMapEl = document.getElementById("statusMap");
-    statusMapEl.innerText = "⚠ map.glb fehlt im Ordner!";
+    console.error(error);
+    statusMapEl.innerText = "⚠ Datei nicht gefunden oder defekt!";
     statusMapEl.className = "error";
   }
 );
 
-// ==========================================
-// 3. PLANE LOADER (Lädt dein Flugzeug 1.glb)
-// ==========================================
-let plane = null; 
+// ========================================================
+// 3. DEIN FLUGZEUG LADEN (1.glb)
+// ========================================================
+let plane = null;
+const statusPlaneEl = document.getElementById("statusPlane");
 
 loader.load(
-  './1.glb', 
+  './1.glb',
   function (gltf) {
     plane = gltf.scene;
+    plane.scale.set(PLANE_SCALE, PLANE_SCALE, PLANE_SCALE);
+    plane.position.set(0, 50, 0); // Startet sicher in der Luft
     
-    // Falls das Flugzeug zu klein/groß ist, skaliere es hier:
-    plane.scale.set(1, 1, 1); 
-    plane.position.set(0, 100, 0); // Startet weit oben in der Luft, um deine Map zu überblicken
-    scene.add(plane);
-    
-    // Automatische Zentrierung des Drehpunkts
+    // Korrektur des Modells gegen falsche Drehpunkte beim Export
     const box = new THREE.Box3().setFromObject(plane);
     const center = box.getCenter(new THREE.Vector3());
-    plane.children.position.x -= center.x;
-    plane.children.position.z -= center.z;
-    
-    const statusPlaneEl = document.getElementById("statusPlane");
-    statusPlaneEl.innerText = "✔ 1.glb geladen!";
+    plane.children.forEach(child => {
+      child.position.x -= center.x;
+      child.position.z -= center.z;
+    });
+
+    scene.add(plane);
+    statusPlaneEl.innerText = "✔ Erfolgreich im Spiel!";
     statusPlaneEl.className = "success";
   },
-  undefined,
+  function (xhr) {
+    if (xhr.total > 0) {
+      statusPlaneEl.innerText = `Lade: ${Math.round((xhr.loaded / xhr.total) * 100)}%`;
+    }
+  },
   function (error) {
-    console.error("Fehler beim Laden des Flugzeugs:", error);
-    const statusPlaneEl = document.getElementById("statusPlane");
-    statusPlaneEl.innerText = "⚠ 1.glb fehlt im Ordner!";
+    console.error(error);
+    statusPlaneEl.innerText = "⚠ Datei nicht gefunden oder defekt!";
     statusPlaneEl.className = "error";
   }
 );
 
-// 4. TASTATUR ABFRAGE
+// ========================================================
+// 4. STEUERUNG & FLUG-LOGIK
+// ========================================================
 const keys = {};
 document.addEventListener("keydown", e => keys[e.code] = true);
 document.addEventListener("keyup", e => keys[e.code] = false);
 
-let speed = 0.6; // Startgeschwindigkeit in der Luft
+let speed = 0.5;
 
-// HUD Text-Elemente cachen
 const elX = document.getElementById("posX");
 const elY = document.getElementById("posY");
 const elZ = document.getElementById("posZ");
-const elRotX = document.getElementById("rotX");
-const elRotZ = document.getElementById("rotZ");
 
-// 5. ANIMATIONSLOOP
 function animate() {
   requestAnimationFrame(animate);
 
-  // Steuerung greift erst, wenn das Flugzeug fertig geladen wurde
+  // Der Loop läuft, aber die Bewegung startet erst, wenn das Flugzeug da ist
   if (plane) {
-    // Vorwärtsbewegung entlang der Flugzeug-Achse
     plane.translateZ(speed);
 
-    // Eingaben verarbeiten
-    if (keys["KeyW"]) plane.rotation.x -= 0.015; // Nase runter
-    if (keys["KeyS"]) plane.rotation.x += 0.015; // Nase hoch
-    if (keys["KeyA"]) plane.rotation.z += 0.025; // Links rollen
-    if (keys["KeyD"]) plane.rotation.z -= 0.025; // Rechts rollen
+    if (keys["KeyW"]) plane.rotation.x -= 0.015;
+    if (keys["KeyS"]) plane.rotation.x += 0.015;
+    if (keys["KeyA"]) plane.rotation.z += 0.025;
+    if (keys["KeyD"]) plane.rotation.z -= 0.025;
     
     if (keys["Space"]) {
-      speed = Math.min(speed + 0.01, 3.0); // Gas geben
+      speed = Math.min(speed + 0.01, 2.5);
     } else {
-      speed = Math.max(speed - 0.005, 0.4); // Gleitflug-Mindesttempo
+      speed = Math.max(speed - 0.005, 0.3);
     }
 
-    // Realistische Kurve fliegen bei Schräglage (Rollen)
+    // Automatische Kurvenneigung
     plane.rotation.y -= plane.rotation.z * 0.05;
 
-    // Dynamische Kamera von weit oben berechnen
-    const relativeCameraOffset = new THREE.Vector3(CAM_SEITE, CAM_HOEHE, CAM_ABSTAND);
+    // Kamera-Kopplung an das Flugzeug
+    const relativeCameraOffset = new THREE.Vector3(0, CAM_HOEHE, CAM_ABSTAND);
     const cameraOffset = relativeCameraOffset.applyMatrix4(plane.matrixWorld);
     
-    camera.position.x = cameraOffset.x;
-    camera.position.y = cameraOffset.y;
-    camera.position.z = cameraOffset.z;
+    camera.position.copy(cameraOffset);
     camera.lookAt(plane.position);
 
-    // Live-Flugdaten ins HUD einspeisen
+    // Live-Koordinaten ins HUD schreiben
     elX.innerText = plane.position.x.toFixed(1);
     elY.innerText = plane.position.y.toFixed(1);
     elZ.innerText = plane.position.z.toFixed(1);
-    elRotX.innerText = (plane.rotation.x * (180 / Math.PI)).toFixed(0);
-    elRotZ.innerText = (plane.rotation.z * (180 / Math.PI)).toFixed(0);
   }
 
   renderer.render(scene, camera);
 }
 
-// Fenster-Resizing
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
