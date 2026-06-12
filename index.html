@@ -2,108 +2,133 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<title>DEBUG Flight</title>
+<title>Flight Simulator</title>
 
 <style>
-body { margin:0; overflow:hidden; background:black; }
+body {
+  margin: 0;
+  overflow: hidden;
+  background: black;
+}
+
 #hud {
-    position:absolute;
-    top:10px;
-    left:10px;
-    color:white;
-    font-family:Arial;
-    background:rgba(0,0,0,0.7);
-    padding:10px;
-    max-width:90%;
-    z-index:10;
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  color: white;
+  font-family: Arial;
+  background: rgba(0,0,0,0.6);
+  padding: 10px;
+  z-index: 10;
 }
 </style>
 </head>
 <body>
 
-<div id="hud">Start...</div>
+<div id="hud">Lade...</div>
 
-<script src="three.min.js"></script>
-<script src="GLTFLoader.js"></script>
+<!-- ✅ DEINE CDN IMPORTS -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/loaders/GLTFLoader.js"></script>
 
 <script>
 let scene, camera, renderer, model;
 const hud = document.getElementById("hud");
 
-function log(msg){
-    console.log(msg);
-    hud.innerHTML = msg;
-}
+let keys = {};
 
-try {
-
-scene = new THREE.Scene();
-scene.background = new THREE.Color(0x87CEEB);
-
-camera = new THREE.PerspectiveCamera(75, innerWidth/innerHeight, 0.1, 2000);
-camera.position.set(0,5,10);
-
-renderer = new THREE.WebGLRenderer({antialias:true});
-renderer.setSize(innerWidth, innerHeight);
-document.body.appendChild(renderer.domElement);
-
-// Licht
-scene.add(new THREE.AmbientLight(0xffffff, 0.6));
-const dir = new THREE.DirectionalLight(0xffffff, 1);
-dir.position.set(10,20,10);
-scene.add(dir);
-
-// Boden
-const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(2000,2000),
-    new THREE.MeshLambertMaterial({color:0x00aa00})
-);
-ground.rotation.x = -Math.PI/2;
-scene.add(ground);
-
-log("Lade GLB...");
-
-// GLB
-const loader = new THREE.GLTFLoader();
-
-loader.load(
-    "./1.glb",
-    (gltf) => {
-        model = gltf.scene;
-        scene.add(model);
-        log("✔ GLB geladen!");
-    },
-    (xhr) => {
-        log("Lade: " + Math.round(xhr.loaded/xhr.total*100) + "%");
-    },
-    (err) => {
-        console.error(err);
-        log("❌ GLB FEHLER: Datei nicht gefunden oder kaputt");
-    }
-);
-
+init();
 animate();
 
-function animate(){
-    requestAnimationFrame(animate);
+function init() {
 
-    if(model){
-        model.rotation.y += 0.01;
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x87CEEB);
+
+  camera = new THREE.PerspectiveCamera(
+    75,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    2000
+  );
+
+  camera.position.set(0, 5, 10);
+
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
+
+  // Licht
+  scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+
+  const light = new THREE.DirectionalLight(0xffffff, 1);
+  light.position.set(10, 20, 10);
+  scene.add(light);
+
+  // GRÜNER BODEN
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(2000, 2000),
+    new THREE.MeshLambertMaterial({ color: 0x00aa00 })
+  );
+  ground.rotation.x = -Math.PI / 2;
+  scene.add(ground);
+
+  // GLB LADEN
+  const loader = new THREE.GLTFLoader();
+
+  loader.load(
+    "./1.glb",
+    (gltf) => {
+      model = gltf.scene;
+      model.position.set(0, 2, 0);
+      scene.add(model);
+      hud.innerHTML = "✔ Flugzeug geladen";
+    },
+    (xhr) => {
+      hud.innerHTML = "Lade: " + Math.round((xhr.loaded / xhr.total) * 100) + "%";
+    },
+    (err) => {
+      console.error(err);
+      hud.innerHTML = "❌ Fehler: 1.glb nicht gefunden";
     }
+  );
 
-    renderer.render(scene,camera);
+  document.addEventListener("keydown", (e) => keys[e.code] = true);
+  document.addEventListener("keyup", (e) => keys[e.code] = false);
+
+  window.addEventListener("resize", onResize);
 }
 
-window.addEventListener("resize",()=>{
-    camera.aspect = innerWidth/innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(innerWidth, innerHeight);
-});
+function animate() {
+  requestAnimationFrame(animate);
 
-} catch(e){
-    log("❌ JS ERROR: " + e.message);
+  if (model) {
+
+    if (keys["KeyW"]) model.translateZ(-0.25);
+    if (keys["KeyS"]) model.translateZ(0.25);
+
+    if (keys["KeyA"]) model.rotation.y += 0.03;
+    if (keys["KeyD"]) model.rotation.y -= 0.03;
+
+    if (keys["Space"]) model.position.y += 0.15;
+    if (keys["ShiftLeft"]) model.position.y -= 0.15;
+
+    // Kamera folgt
+    const offset = new THREE.Vector3(0, 4, 10);
+    const camPos = model.position.clone().add(offset);
+
+    camera.position.lerp(camPos, 0.08);
+    camera.lookAt(model.position);
+  }
+
+  renderer.render(scene, camera);
 }
 
+function onResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
 </script>
 
 </body>
