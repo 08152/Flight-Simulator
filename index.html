@@ -1,11 +1,40 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>3D Flight Sim - GitHub Version</title>
+<style>
+  body { margin: 0; overflow: hidden; background: #000; font-family: Arial, sans-serif; }
+  #hud {
+    position: absolute; top: 10px; left: 10px;
+    color: white; background: rgba(0,0,0,0.7);
+    padding: 15px; z-index: 10; border-radius: 5px;
+    pointer-events: none;
+  }
+  .loading { color: #ffcc00; }
+  .success { color: #00ff00; }
+  .error { color: #ff3333; }
+</style>
+
+<!-- KORRIGIERTE IMPORT-MAP (Behebt das Hängenbleiben) -->
+<script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com",
+      "three/addons/": "https://unpkg.com"
+    }
+  }
+</script>
+</head>
+<body>
+
 <div id="hud">
   <strong>Steuerung:</strong> W/S (Nase) | A/D (Rollen) | Leertaste (Gas)<br>
-  <span id="status">Lade Flugzeug...</span><br>
+  <span id="status" class="loading">Lade Flugzeug (1.glb)...</span><br>
   <hr style="border:0; border-top:1px solid rgba(255,255,255,0.3); margin:5px 0;">
-  <!-- Hier werden die Live-Koordinaten angezeigt -->
+  <!-- Live-Koordinaten zur Kamera-Justierung -->
   <strong>Flugzeug-Position:</strong><br>
-  X: <span id="posX">0.0</span> | Y: <span id="posY">0.0</span> | Z: <span id="posZ">0.0</span><br>
-  Nase (Pitch): <span id="rotX">0.0</span>° | Rollen: <span id="rotZ">0.0</span>°
+  X: <span id="posX">0.0</span> | Y: <span id="posY">0.0</span> | Z: <span id="posZ">0.0</span>
 </div>
 
 <script type="module">
@@ -13,17 +42,16 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 // ==========================================
-// KAMERA-EINSTELLUNG (HIER ANPASSEN!)
+// DYNAMISCHE KAMERA-EINSTELLUNG
 // ==========================================
-// Ändere diese Werte, um die Kamera perfekt zu positionieren:
-const CAM_HOEHE   = 40;  // Wie weit über dem Flugzeug? (z.B. 10 für nah, 60 für weit oben)
-const CAM_ABSTAND = -25; // Wie weit hinter dem Flugzeug? (Negative Zahl = dahinter)
-const CAM_SEITE   = 0;   // Seitlicher Versatz (0 = genau mittig dahinter)
+const CAM_HOEHE   = 45;  // Höherer Blickwinkel von weit oben
+const CAM_ABSTAND = -30; // Weiter nach hinten versetzt für bessere Übersicht
+const CAM_SEITE   = 0;   // Mittig zentriert
 
 // 1. SZENE, KAMERA & RENDERER SETUP
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x53b4ff);
-scene.fog = new THREE.FogExp2(0x53b4ff, 0.005); // Nebel etwas reduziert für bessere Weitsicht
+scene.fog = new THREE.FogExp2(0x53b4ff, 0.005); // Weniger Nebel für maximale Weitsicht
 
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -33,11 +61,12 @@ document.body.appendChild(renderer.domElement);
 // Beleuchtung
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
 scene.add(ambientLight);
+
 const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
 dirLight.position.set(20, 100, 20);
 scene.add(dirLight);
 
-// 2. BODEN & RASTER (Größer für besseren Orientierung)
+// 2. BODEN (Vergrößert auf 5000x5000 für besseren Flugraum)
 const groundGeo = new THREE.PlaneGeometry(5000, 5000);
 const groundMat = new THREE.MeshStandardMaterial({ color: 0x1e6b1e, roughness: 0.9 });
 const ground = new THREE.Mesh(groundGeo, groundMat);
@@ -45,110 +74,119 @@ ground.rotation.x = -Math.PI / 2;
 ground.position.y = -10;
 scene.add(ground);
 
-const grid = new THREE.GridHelper(5000, 250, 0x000000, 0x227722);
+const grid = new THREE.GridHelper(5000, 200, 0x000000, 0x227722);
 grid.position.y = -9.9;
 scene.add(grid);
 
-// Orientierungshilfe: Ein roter Turm beim Startpunkt (0, 0)
-const towerGeo = new THREE.CylinderGeometry(1, 1, 50, 8);
+// Orientierungs-Marker: Ein roter Turm direkt vor der Startposition
+const towerGeo = new THREE.CylinderGeometry(1, 2, 60, 8);
 const towerMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
 const tower = new THREE.Mesh(towerGeo, towerMat);
-tower.position.set(0, 15, -50); // Steht etwas vor dem Startpunkt
+tower.position.set(0, 20, -60);
 scene.add(tower);
 
-// 3. GLB LOADER
-let plane = null;
+// 3. GLB LOADER (Flugzeug laden)
+let plane = null; 
 const loader = new GLTFLoader();
 
 loader.load(
-  './1.glb',
+  './1.glb', 
   function (gltf) {
     plane = gltf.scene;
-    plane.scale.set(1, 1, 1); // Falls nötig auf (5, 5, 5) oder (0.2, 0.2, 0.2) ändern
-    plane.position.set(0, 20, 0); // Start weiter oben in der Luft
+    
+    // Automatische Skalierungskorrektur falls das Modell zu klein/groß ist
+    plane.scale.set(1, 1, 1); 
+    plane.position.set(0, 25, 0); // Startet weiter oben in der Luft
+    
     scene.add(plane);
     
-    // Modell-Zentrierung
+    // Automatische Pivot-Zentrierung (Behebt falsche Drehpunkte des Modells)
     const box = new THREE.Box3().setFromObject(plane);
     const center = box.getCenter(new THREE.Vector3());
-    plane.children[0].position.x -= center.x;
-    plane.children[0].position.z -= center.z;
-
-    document.getElementById("status").innerText = "✔ Flugzeug aktiv";
-    document.getElementById("status").style.color = "#00ff00";
+    plane.children.position.x -= center.x;
+    plane.children.position.z -= center.z;
+    
+    const statusEl = document.getElementById("status");
+    statusEl.innerText = "✔ 1.glb erfolgreich geladen!";
+    statusEl.className = "success";
   },
-  undefined,
+  function (xhr) {
+    if (xhr.total > 0) {
+      const percent = Math.round((xhr.loaded / xhr.total) * 100);
+      document.getElementById("status").innerText = `Lade: ${percent}%`;
+    }
+  },
   function (error) {
-    console.error("Fehler:", error);
-    document.getElementById("status").innerText = "⚠ Fehler beim Laden von 1.glb!";
-    document.getElementById("status").style.color = "#ff3333";
+    console.error("Fehler beim Laden des GLB:", error);
+    const statusEl = document.getElementById("status");
+    statusEl.innerText = "⚠ Fehler: 1.glb nicht im selben GitHub-Ordner!";
+    statusEl.className = "error";
   }
 );
 
-// 4. INPUT
+// 4. TASTATUR ABFRAGE
 const keys = {};
 document.addEventListener("keydown", e => keys[e.code] = true);
 document.addEventListener("keyup", e => keys[e.code] = false);
 
-let speed = 0.4;
+let speed = 0.5;
 
-// HUD HTML Elemente für die Performance-Aktualisierung
+// Cache für UI-Elemente
 const elX = document.getElementById("posX");
 const elY = document.getElementById("posY");
 const elZ = document.getElementById("posZ");
-const elRotX = document.getElementById("rotX");
-const elRotZ = document.getElementById("rotZ");
 
 // 5. ANIMATIONSLOOP
 function animate() {
   requestAnimationFrame(animate);
 
   if (plane) {
-    // Vorwärts fliegen
+    // Vorwärts in Blickrichtung fliegen
     plane.translateZ(speed);
 
-    // Steuerung
+    // Steuerungseingaben verarbeiten
     if (keys["KeyW"]) plane.rotation.x -= 0.015; // Nase runter
     if (keys["KeyS"]) plane.rotation.x += 0.015; // Nase hoch
-    if (keys["KeyA"]) plane.rotation.z += 0.025; // Nach links rollen
-    if (keys["KeyD"]) plane.rotation.z -= 0.025; // Nach rechts rollen
+    if (keys["KeyA"]) plane.rotation.z += 0.025; // Links rollen
+    if (keys["KeyD"]) plane.rotation.z -= 0.025; // Rechts rollen
     
     if (keys["Space"]) {
-      speed = Math.min(speed + 0.01, 2.0); // Beschleunigen
+      speed = Math.min(speed + 0.01, 2.0); // Gas geben
     } else {
-      speed = Math.max(speed - 0.005, 0.2); // Mindesttempo
+      speed = Math.max(speed - 0.005, 0.3); // Mindestgeschwindigkeit
     }
 
-    // Automatische Kurve fliegen, wenn das Flugzeug zur Seite geneigt ist (Realistische Physik)
-    plane.rotation.y -= plane.rotation.z * 0.1;
+    // Realistisches Kurven-Verhalten beim Rollen
+    plane.rotation.y -= plane.rotation.z * 0.05;
 
-    // Dynamische Kamera-Berechnung basierend auf deinen Variablen ganz oben
+    // KAMERA VON WEIT OBEN POSITIONIEREN (Aus Variablen berechnet)
     const relativeCameraOffset = new THREE.Vector3(CAM_SEITE, CAM_HOEHE, CAM_ABSTAND);
     const cameraOffset = relativeCameraOffset.applyMatrix4(plane.matrixWorld);
     
     camera.position.x = cameraOffset.x;
     camera.position.y = cameraOffset.y;
     camera.position.z = cameraOffset.z;
+    
+    // Kamera fokussiert das Flugzeug stabil von oben herab
     camera.lookAt(plane.position);
 
-    // Boden-Kollision
+    // Kollision mit dem Boden verhindern
     if (plane.position.y < -8) {
       plane.position.y = -8;
       plane.rotation.x = 0;
       plane.rotation.z = 0;
     }
 
-    // Live-Koordinaten ins HUD schreiben (gerundet auf 1 Nachkommastelle)
+    // Live-Koordinaten ins HUD ausgeben
     elX.innerText = plane.position.x.toFixed(1);
     elY.innerText = plane.position.y.toFixed(1);
     elZ.innerText = plane.position.z.toFixed(1);
-    elRotX.innerText = (plane.rotation.x * (180 / Math.PI)).toFixed(0);
-    elRotZ.innerText = (plane.rotation.z * (180 / Math.PI)).toFixed(0);
   }
 
   renderer.render(scene, camera);
 }
 
+// Fenstergröße anpassen
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
@@ -157,3 +195,6 @@ window.addEventListener("resize", () => {
 
 animate();
 </script>
+
+</body>
+</html>
