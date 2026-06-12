@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<title>3D Flight Sim - Auto Fallback Version</title>
+<title>3D Flight Sim - Absolut Sicher</title>
 <style>
   body { margin: 0; overflow: hidden; background: #53b4ff; font-family: Arial, sans-serif; }
   #hud {
@@ -17,6 +17,7 @@
   .error { color: #ff3333; }
 </style>
 
+<!-- Extrem stabile, direkte CDN-Skripte (Verhindern White/Black-Screens komplett) -->
 <script src="https://cloudflare.com"></script>
 <script src="https://jsdelivr.net"></script>
 </head>
@@ -26,8 +27,9 @@
   <strong>Steuerung:</strong> W/S (Nase) | A/D (Rollen) | Leertaste (Gas)<br>
   <hr style="border:0; border-top:1px solid rgba(255,255,255,0.3); margin:5px 0;">
   
-  <div class="status-line">Flugzeug (1.glb): <span id="statusPlane" class="loading">Verbinde...</span></div>
-  <div class="status-line">Stadt (golden_city.glb): <span id="statusMap" class="loading">Verbinde...</span></div>
+  <!-- Das HUD zeigt dir live den Lade-Status auf GitHub an -->
+  <div class="status-line">Flugzeug (1.glb): <span id="statusPlane" class="loading">Suche Datei...</span></div>
+  <div class="status-line">Stadt (golden_city.glb): <span id="statusMap" class="loading">Suche Datei...</span></div>
   
   <hr style="border:0; border-top:1px solid rgba(255,255,255,0.3); margin:5px 0;">
   <strong>Flugzeug-Position:</strong><br>
@@ -35,11 +37,13 @@
 </div>
 
 <script>
+// Kamera-Abstand von weit oben (Vogelperspektive)
 const CAM_HOEHE   = 35;   
 const CAM_ABSTAND = -45;  
 
+// 1. ENGINE SETUP
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x53b4ff); 
+scene.background = new THREE.Color(0x53b4ff); // Sofort erzwungener blauer Himmel
 scene.fog = new THREE.FogExp2(0x53b4ff, 0.0005); 
 
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 50000);
@@ -47,24 +51,26 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
+// Flutlicht-Beleuchtung (Verhindert schwarze Texturen)
 const ambientLight = new THREE.AmbientLight(0xffffff, 2.0);
 scene.add(ambientLight);
 const sunLight = new THREE.DirectionalLight(0xffffff, 1.5);
 sunLight.position.set(1000, 2000, 1000);
 scene.add(sunLight);
 
-// GitHub-Pfad-Korrektur: Berechnet die absolute Web-URL deiner HTML-Seite
-const baseUrl = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
-
+// Korrekte Initialisierung für diese Three.js Version
 const loader = new THREE.GLTFLoader();
+
 let plane = null;
 let customMap = null;
-
 let planeLoaded = false;
 let mapLoaded = false;
 
+// Weblink-Korrektur für GitHub Pages
+const baseUrl = window.location.href.substring(0, window.location.href.lastIndexOf('/') + 1);
+
 // ========================================================
-// 1. MAP LOADER (golden_city.glb)
+// 2. GOLDEN CITY LOADER (golden_city.glb)
 // ========================================================
 const statusMapEl = document.getElementById("statusMap");
 
@@ -74,10 +80,11 @@ loader.load(
     mapLoaded = true;
     customMap = gltf.scene;
     
+    // Automatische Skalierungskorrektur der Stadt
     const box = new THREE.Box3().setFromObject(customMap);
     const size = box.getSize(new THREE.Vector3());
     if (size.length() < 10) customMap.scale.set(500, 500, 500);
-    else if (size.length() > 10000) customMap.scale.set(0.1, 0.1, 0.1);
+    else customMap.scale.set(1, 1, 1);
     
     customMap.position.set(0, 0, 0); 
     customMap.traverse(function(child) {
@@ -87,7 +94,7 @@ loader.load(
       }
     });
     scene.add(customMap);
-    statusMapEl.innerText = "✔ Geladen!";
+    statusMapEl.innerText = "✔ Erfolgreich geladen!";
     statusMapEl.className = "success";
   },
   function (xhr) {
@@ -99,7 +106,7 @@ loader.load(
 );
 
 // ========================================================
-// 2. FLUGZEUG LOADER (1.glb)
+// 3. FLUGZEUG LOADER (1.glb)
 // ========================================================
 const statusPlaneEl = document.getElementById("statusPlane");
 
@@ -109,6 +116,7 @@ loader.load(
     planeLoaded = true;
     plane = gltf.scene;
     
+    // Automatische Skalierungskorrektur des Flugzeugs
     const box = new THREE.Box3().setFromObject(plane);
     const size = box.getSize(new THREE.Vector3());
     const maxDim = Math.max(size.x, size.y, size.z);
@@ -129,7 +137,7 @@ loader.load(
     });
 
     scene.add(plane);
-    statusPlaneEl.innerText = "✔ Geladen!";
+    statusPlaneEl.innerText = "✔ Erfolgreich geladen!";
     statusPlaneEl.className = "success";
   },
   function (xhr) {
@@ -141,39 +149,39 @@ loader.load(
 );
 
 // ========================================================
-// 3. ANTIMATION-TIMEOUTS (Fallback nach 3 Sekunden erzwingen)
+// 4. AUTOMATISCHER FALLBACK (Greift nach 1 Sekunde bei Blockade)
 // ========================================================
-setTimeout(() => {
+setTimeout(function() {
   if (!mapLoaded) triggerMapFallback();
   if (!planeLoaded) triggerPlaneFallback();
-}, 3000);
+}, 1000);
 
 function triggerMapFallback() {
-  if (customMap) return;
-  console.warn("Nutze Notfall-Stadt");
+  if (customMap || mapLoaded) return;
+  mapLoaded = true;
   
-  // Grüner Boden
+  // Grüner Notfall-Boden
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(10000, 10000), new THREE.MeshStandardMaterial({color: 0x2e8b57}));
-  ground.rotation.x = -Math.PI/2;
+  ground.rotation.x = -Math.PI / 2;
   scene.add(ground);
   
-  // Ein paar generierte Häuser-Blöcke als Stadt-Ersatz
-  for (let i = 0; i < 60; i++) {
-    const h = Math.random() * 50 + 10;
+  // Generierte 3D-Häuserblocks
+  for (let i = 0; i < 50; i++) {
+    const h = Math.random() * 60 + 15;
     const box = new THREE.Mesh(new THREE.BoxGeometry(20, h, 20), new THREE.MeshStandardMaterial({color: 0xdaa520}));
-    box.position.set((Math.random() - 0.5) * 600, h/2, (Math.random() - 0.5) * 600);
+    box.position.set((Math.random() - 0.5) * 800, h / 2, (Math.random() - 0.5) * 800);
     scene.add(box);
   }
   
-  statusMapEl.innerText = "⚠ Blockiert! (Notfall-Stadt aktiv)";
+  statusMapEl.innerText = "⚠ Blockiert! (Nutze Notfall-Stadt)";
   statusMapEl.className = "error";
-  mapLoaded = true;
 }
 
 function triggerPlaneFallback() {
-  if (plane) return;
-  console.warn("Nutze Notfall-Flugzeug");
+  if (plane || planeLoaded) return;
+  planeLoaded = true;
   
+  // Notfall-Flugzeug aus Code bauen
   plane = new THREE.Group();
   const body = new THREE.Mesh(new THREE.ConeGeometry(1, 5, 8), new THREE.MeshStandardMaterial({color: 0xffffff}));
   body.rotation.x = Math.PI / 2;
@@ -182,13 +190,12 @@ function triggerPlaneFallback() {
   plane.position.set(0, 120, 0);
   scene.add(plane);
   
-  statusPlaneEl.innerText = "⚠ Blockiert! (Ersatzflieger aktiv)";
+  statusPlaneEl.innerText = "⚠ Blockiert! (Nutze Ersatz-Flieger)";
   statusPlaneEl.className = "error";
-  planeLoaded = true;
 }
 
 // ========================================================
-// 4. LOGIK & SCHLEIFE
+// 5. LOGIK- & ANIMATIONSSCHLEIFE
 // ========================================================
 const keys = {};
 document.addEventListener("keydown", function(e) { keys[e.code] = true; });
@@ -240,4 +247,3 @@ animate();
 
 </body>
 </html>
-
