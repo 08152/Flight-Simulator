@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<title>3D Flight Sim - GitHub Version</title>
+<title>3D Flight Sim - Custom Map Version</title>
 <style>
   body { margin: 0; overflow: hidden; background: #000; font-family: Arial, sans-serif; }
   #hud {
@@ -11,12 +11,13 @@
     padding: 15px; z-index: 10; border-radius: 5px;
     pointer-events: none;
   }
+  .status-line { margin: 3px 0; font-size: 13px; }
   .loading { color: #ffcc00; }
   .success { color: #00ff00; }
   .error { color: #ff3333; }
 </style>
 
-<!-- KORRIGIERTE IMPORT-MAP (Behebt das Hängenbleiben) -->
+<!-- Unverzichtbar: Lädt die Three.js-Bibliotheken korrekt ohne Absturz -->
 <script type="importmap">
   {
     "imports": {
@@ -30,11 +31,15 @@
 
 <div id="hud">
   <strong>Steuerung:</strong> W/S (Nase) | A/D (Rollen) | Leertaste (Gas)<br>
-  <span id="status" class="loading">Lade Flugzeug (1.glb)...</span><br>
   <hr style="border:0; border-top:1px solid rgba(255,255,255,0.3); margin:5px 0;">
-  <!-- Live-Koordinaten zur Kamera-Justierung -->
+  
+  <div class="status-line">Flugzeug: <span id="statusPlane" class="loading">Lade 1.glb...</span></div>
+  <div class="status-line">Weltkarte: <span id="statusMap" class="loading">Lade map.glb...</span></div>
+  
+  <hr style="border:0; border-top:1px solid rgba(255,255,255,0.3); margin:5px 0;">
   <strong>Flugzeug-Position:</strong><br>
-  X: <span id="posX">0.0</span> | Y: <span id="posY">0.0</span> | Z: <span id="posZ">0.0</span>
+  X: <span id="posX">0.0</span> | Y: <span id="posY">0.0</span> | Z: <span id="posZ">0.0</span><br>
+  Nase (Pitch): <span id="rotX">0.0</span>° | Rollen: <span id="rotZ">0.0</span>°
 </div>
 
 <script type="module">
@@ -42,85 +47,92 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 // ==========================================
-// DYNAMISCHE KAMERA-EINSTELLUNG
+// KAMERA-PERSPEKTIVE (Vogelperspektive von weit oben)
 // ==========================================
-const CAM_HOEHE   = 45;  // Höherer Blickwinkel von weit oben
-const CAM_ABSTAND = -30; // Weiter nach hinten versetzt für bessere Übersicht
-const CAM_SEITE   = 0;   // Mittig zentriert
+const CAM_HOEHE   = 50;  // Wie weit über dem Flugzeug? (Erhöhen für mehr Abstand)
+const CAM_ABSTAND = -35; // Wie weit hinter dem Flugzeug? (Negativ = dahinter)
+const CAM_SEITE   = 0;   // Seitlicher Versatz
 
 // 1. SZENE, KAMERA & RENDERER SETUP
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x53b4ff);
-scene.fog = new THREE.FogExp2(0x53b4ff, 0.005); // Weniger Nebel für maximale Weitsicht
+scene.background = new THREE.Color(0x53b4ff); // Blauer Himmel
+scene.fog = new THREE.FogExp2(0x53b4ff, 0.002); // Sehr leichter Nebel für extreme Weitsicht
 
-const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 5000);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// Beleuchtung
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+// Starke Beleuchtung für die geladenen GLB-Modelle
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.9);
 scene.add(ambientLight);
 
-const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-dirLight.position.set(20, 100, 20);
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.0);
+dirLight.position.set(100, 300, 100);
 scene.add(dirLight);
 
-// 2. BODEN (Vergrößert auf 5000x5000 für besseren Flugraum)
-const groundGeo = new THREE.PlaneGeometry(5000, 5000);
-const groundMat = new THREE.MeshStandardMaterial({ color: 0x1e6b1e, roughness: 0.9 });
-const ground = new THREE.Mesh(groundGeo, groundMat);
-ground.rotation.x = -Math.PI / 2;
-ground.position.y = -10;
-scene.add(ground);
-
-const grid = new THREE.GridHelper(5000, 200, 0x000000, 0x227722);
-grid.position.y = -9.9;
-scene.add(grid);
-
-// Orientierungs-Marker: Ein roter Turm direkt vor der Startposition
-const towerGeo = new THREE.CylinderGeometry(1, 2, 60, 8);
-const towerMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-const tower = new THREE.Mesh(towerGeo, towerMat);
-tower.position.set(0, 20, -60);
-scene.add(tower);
-
-// 3. GLB LOADER (Flugzeug laden)
-let plane = null; 
 const loader = new GLTFLoader();
+
+// ==========================================
+// 2. MAP LOADER (Lädt deine map.glb)
+// ==========================================
+let customMap = null;
+
+loader.load(
+  './map.glb',
+  function (gltf) {
+    customMap = gltf.scene;
+    
+    // Falls deine map.glb im Spiel zu klein/groß ist, passe diese Skalierung an:
+    customMap.scale.set(1, 1, 1); 
+    customMap.position.set(0, 0, 0); // Liegt im Zentrum der Welt
+    
+    scene.add(customMap);
+    
+    const statusMapEl = document.getElementById("statusMap");
+    statusMapEl.innerText = "✔ map.glb geladen!";
+    statusMapEl.className = "success";
+  },
+  undefined,
+  function (error) {
+    console.error("Fehler beim Laden der Map:", error);
+    const statusMapEl = document.getElementById("statusMap");
+    statusMapEl.innerText = "⚠ map.glb fehlt im Ordner!";
+    statusMapEl.className = "error";
+  }
+);
+
+// ==========================================
+// 3. PLANE LOADER (Lädt dein Flugzeug 1.glb)
+// ==========================================
+let plane = null; 
 
 loader.load(
   './1.glb', 
   function (gltf) {
     plane = gltf.scene;
     
-    // Automatische Skalierungskorrektur falls das Modell zu klein/groß ist
+    // Falls das Flugzeug zu klein/groß ist, skaliere es hier:
     plane.scale.set(1, 1, 1); 
-    plane.position.set(0, 25, 0); // Startet weiter oben in der Luft
-    
+    plane.position.set(0, 100, 0); // Startet weit oben in der Luft, um deine Map zu überblicken
     scene.add(plane);
     
-    // Automatische Pivot-Zentrierung (Behebt falsche Drehpunkte des Modells)
+    // Automatische Zentrierung des Drehpunkts
     const box = new THREE.Box3().setFromObject(plane);
     const center = box.getCenter(new THREE.Vector3());
     plane.children.position.x -= center.x;
     plane.children.position.z -= center.z;
     
-    const statusEl = document.getElementById("status");
-    statusEl.innerText = "✔ 1.glb erfolgreich geladen!";
-    statusEl.className = "success";
+    const statusPlaneEl = document.getElementById("statusPlane");
+    statusPlaneEl.innerText = "✔ 1.glb geladen!";
+    statusPlaneEl.className = "success";
   },
-  function (xhr) {
-    if (xhr.total > 0) {
-      const percent = Math.round((xhr.loaded / xhr.total) * 100);
-      document.getElementById("status").innerText = `Lade: ${percent}%`;
-    }
-  },
+  undefined,
   function (error) {
-    console.error("Fehler beim Laden des GLB:", error);
-    const statusEl = document.getElementById("status");
-    statusEl.innerText = "⚠ Fehler: 1.glb nicht im selben GitHub-Ordner!";
-    statusEl.className = "error";
+    console.error("Fehler beim Laden des Flugzeugs:", error);
+    const statusPlaneEl = document.getElementById("statusPlane");
+    statusPlaneEl.innerText = "⚠ 1.glb fehlt im Ordner!";
+    statusPlaneEl.className = "error";
   }
 );
 
@@ -129,64 +141,60 @@ const keys = {};
 document.addEventListener("keydown", e => keys[e.code] = true);
 document.addEventListener("keyup", e => keys[e.code] = false);
 
-let speed = 0.5;
+let speed = 0.6; // Startgeschwindigkeit in der Luft
 
-// Cache für UI-Elemente
+// HUD Text-Elemente cachen
 const elX = document.getElementById("posX");
 const elY = document.getElementById("posY");
 const elZ = document.getElementById("posZ");
+const elRotX = document.getElementById("rotX");
+const elRotZ = document.getElementById("rotZ");
 
 // 5. ANIMATIONSLOOP
 function animate() {
   requestAnimationFrame(animate);
 
+  // Steuerung greift erst, wenn das Flugzeug fertig geladen wurde
   if (plane) {
-    // Vorwärts in Blickrichtung fliegen
+    // Vorwärtsbewegung entlang der Flugzeug-Achse
     plane.translateZ(speed);
 
-    // Steuerungseingaben verarbeiten
+    // Eingaben verarbeiten
     if (keys["KeyW"]) plane.rotation.x -= 0.015; // Nase runter
     if (keys["KeyS"]) plane.rotation.x += 0.015; // Nase hoch
     if (keys["KeyA"]) plane.rotation.z += 0.025; // Links rollen
     if (keys["KeyD"]) plane.rotation.z -= 0.025; // Rechts rollen
     
     if (keys["Space"]) {
-      speed = Math.min(speed + 0.01, 2.0); // Gas geben
+      speed = Math.min(speed + 0.01, 3.0); // Gas geben
     } else {
-      speed = Math.max(speed - 0.005, 0.3); // Mindestgeschwindigkeit
+      speed = Math.max(speed - 0.005, 0.4); // Gleitflug-Mindesttempo
     }
 
-    // Realistisches Kurven-Verhalten beim Rollen
+    // Realistische Kurve fliegen bei Schräglage (Rollen)
     plane.rotation.y -= plane.rotation.z * 0.05;
 
-    // KAMERA VON WEIT OBEN POSITIONIEREN (Aus Variablen berechnet)
+    // Dynamische Kamera von weit oben berechnen
     const relativeCameraOffset = new THREE.Vector3(CAM_SEITE, CAM_HOEHE, CAM_ABSTAND);
     const cameraOffset = relativeCameraOffset.applyMatrix4(plane.matrixWorld);
     
     camera.position.x = cameraOffset.x;
     camera.position.y = cameraOffset.y;
     camera.position.z = cameraOffset.z;
-    
-    // Kamera fokussiert das Flugzeug stabil von oben herab
     camera.lookAt(plane.position);
 
-    // Kollision mit dem Boden verhindern
-    if (plane.position.y < -8) {
-      plane.position.y = -8;
-      plane.rotation.x = 0;
-      plane.rotation.z = 0;
-    }
-
-    // Live-Koordinaten ins HUD ausgeben
+    // Live-Flugdaten ins HUD einspeisen
     elX.innerText = plane.position.x.toFixed(1);
     elY.innerText = plane.position.y.toFixed(1);
     elZ.innerText = plane.position.z.toFixed(1);
+    elRotX.innerText = (plane.rotation.x * (180 / Math.PI)).toFixed(0);
+    elRotZ.innerText = (plane.rotation.z * (180 / Math.PI)).toFixed(0);
   }
 
   renderer.render(scene, camera);
 }
 
-// Fenstergröße anpassen
+// Fenster-Resizing
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
