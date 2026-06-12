@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<title>3D Flight Sim - Direct Load Version</title>
+<title>3D Flight Sim - Complete Version</title>
 <style>
   body { margin: 0; overflow: hidden; background: #53b4ff; font-family: Arial, sans-serif; }
   #hud {
@@ -17,7 +17,7 @@
   .error { color: #ff3333; }
 </style>
 
-<!-- Direkte Skript-Ladung ohne Import-Map (Verhindert White/Black-Screen Abstürze) -->
+<!-- Direkte Skript-Ladung ohne fehleranfällige Import-Maps -->
 <script src="https://cloudflare.com"></script>
 <script src="https://jsdelivr.net"></script>
 </head>
@@ -37,37 +37,33 @@
 
 <script>
 // ========================================================
-// 1. SKALIERUNG FÜR DEINE GLBS (Hier bei Bedarf anpassen)
+// MANUELLE KAMERA-JUSTIERUNG (Aus Vogelperspektive)
 // ========================================================
-const PLANE_SCALE = 1.0;  // Falls dein Flugzeug winzig ist: Erhöhe auf 5 oder 10
-const MAP_SCALE   = 2.0;  // Skalierung für Golden City
-
-const CAM_HOEHE   = 35;   // Blickhöhe weit über dem Flugzeug (Vogelperspektive)
-const CAM_ABSTAND = -25;  // Abstand hinter dem Flugzeug
+const CAM_HOEHE   = 35;   // Höhe der Kamera über dem Flugzeug
+const CAM_ABSTAND = -45;  // Abstand hinter dem Flugzeug
 
 // Szene Setup
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x53b4ff); // Sofort sichtbarer blauer Himmel
-scene.fog = new THREE.FogExp2(0x53b4ff, 0.001);
+scene.background = new THREE.Color(0x53b4ff); 
+scene.fog = new THREE.FogExp2(0x53b4ff, 0.0005); 
 
-const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 10000);
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 50000);
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// Sehr starke Beleuchtung, damit deine Original-Dateien nicht schwarz aussehen
-const ambientLight = new THREE.AmbientLight(0xffffff, 1.6);
+// Flutlicht-Beleuchtung (Verhindert komplett schwarze Objekte)
+const ambientLight = new THREE.AmbientLight(0xffffff, 2.0);
 scene.add(ambientLight);
 
-const dirLight = new THREE.DirectionalLight(0xffffff, 1.4);
-dirLight.position.set(200, 800, 200);
-scene.add(dirLight);
+const sunLight = new THREE.DirectionalLight(0xffffff, 1.5);
+sunLight.position.set(1000, 2000, 1000);
+scene.add(sunLight);
 
-// Verwende den globalen GLTFLoader aus dem direkten Skript-Import
 const loader = new THREE.GLTFLoader();
 
 // ========================================================
-// 2. GOLDEN CITY LOADER (golden_city.glb)
+// 2. MAP LOADER (golden_city.glb)
 // ========================================================
 let customMap = null;
 const statusMapEl = document.getElementById("statusMap");
@@ -76,11 +72,26 @@ loader.load(
   './golden_city.glb', 
   function (gltf) {
     customMap = gltf.scene;
-    customMap.scale.set(MAP_SCALE, MAP_SCALE, MAP_SCALE);
-    customMap.position.set(0, 0, 0); 
     
+    // Automatische Größenberechnung der Stadt
+    const box = new THREE.Box3().setFromObject(customMap);
+    const size = box.getSize(new THREE.Vector3());
+    
+    // Falls die Stadt winzig exportiert wurde, blasen wir sie stark auf
+    if (size.length() < 10) {
+      customMap.scale.set(500, 500, 500);
+    } else if (size.length() > 10000) {
+      customMap.scale.set(0.1, 0.1, 0.1);
+    } else {
+      customMap.scale.set(1, 1, 1);
+    }
+    
+    customMap.position.set(0, 0, 0); 
+
+    // Rendere Texturen doppelseitig gegen Unsichtbarkeit
     customMap.traverse(function(child) {
       if (child.isMesh) {
+        child.material.side = THREE.DoubleSide;
         child.material.depthWrite = true;
       }
     });
@@ -90,13 +101,11 @@ loader.load(
     statusMapEl.className = "success";
   },
   function (xhr) {
-    if (xhr.total > 0) {
-      statusMapEl.innerText = "Lade: " + Math.round((xhr.loaded / xhr.total) * 100) + "%";
-    }
+    if (xhr.total > 0) statusMapEl.innerText = "Lade: " + Math.round((xhr.loaded / xhr.total) * 100) + "%";
   },
   function (error) {
     console.error(error);
-    statusMapEl.innerText = "⚠ Nicht gefunden!";
+    statusMapEl.innerText = "⚠ Nicht im Ordner!";
     statusMapEl.className = "error";
   }
 );
@@ -111,15 +120,29 @@ loader.load(
   './1.glb',
   function (gltf) {
     plane = gltf.scene;
-    plane.scale.set(PLANE_SCALE, PLANE_SCALE, PLANE_SCALE);
-    plane.position.set(0, 80, 0); // Startet hoch über den Dächern
     
-    // Zentrierung des Modells gegen falsche Exporthöhen
+    // Zwinge das Flugzeug vollautomatisch auf eine spielbare Standardgröße
     const box = new THREE.Box3().setFromObject(plane);
+    const size = box.getSize(new THREE.Vector3());
+    const maxDim = Math.max(size.x, size.y, size.z);
+    const targetScale = 6 / maxDim;
+    plane.scale.set(targetScale, targetScale, targetScale);
+    
+    plane.position.set(0, 150, 0); // Startet hoch in der Luft
+
+    // Fix gegen dezentrierte Drehpunkte (Modell-Zentrierung)
     const center = box.getCenter(new THREE.Vector3());
     plane.children.forEach(function(child) {
       child.position.x -= center.x;
+      child.position.y -= center.y;
       child.position.z -= center.z;
+    });
+
+    // Erzwungene Sichtbarkeit der Flugzeughülle
+    plane.traverse(function(child) {
+      if (child.isMesh) {
+        child.material.side = THREE.DoubleSide;
+      }
     });
 
     scene.add(plane);
@@ -127,25 +150,23 @@ loader.load(
     statusPlaneEl.className = "success";
   },
   function (xhr) {
-    if (xhr.total > 0) {
-      statusPlaneEl.innerText = "Lade: " + Math.round((xhr.loaded / xhr.total) * 100) + "%";
-    }
+    if (xhr.total > 0) statusPlaneEl.innerText = "Lade: " + Math.round((xhr.loaded / xhr.total) * 100) + "%";
   },
   function (error) {
     console.error(error);
-    statusPlaneEl.innerText = "⚠ Nicht gefunden!";
+    statusPlaneEl.innerText = "⚠ Nicht im Ordner!";
     statusPlaneEl.className = "error";
   }
 );
 
 // ========================================================
-// 4. STEUERUNG
+// 4. STEUERUNG & FLUGMECHANIK
 // ========================================================
 const keys = {};
 document.addEventListener("keydown", function(e) { keys[e.code] = true; });
 document.addEventListener("keyup", function(e) { keys[e.code] = false; });
 
-let speed = 0.6;
+let speed = 1.2; 
 
 const elX = document.getElementById("posX");
 const elY = document.getElementById("posY");
@@ -157,26 +178,29 @@ function animate() {
   if (plane) {
     plane.translateZ(speed);
 
-    if (keys["KeyW"]) plane.rotation.x -= 0.015; 
-    if (keys["KeyS"]) plane.rotation.x += 0.015; 
-    if (keys["KeyA"]) plane.rotation.z += 0.025; 
-    if (keys["KeyD"]) plane.rotation.z -= 0.025; 
+    // Eingaben steuern Flugzeugachsen
+    if (keys["KeyW"]) plane.rotation.x -= 0.015; // Runter neigen
+    if (keys["KeyS"]) plane.rotation.x += 0.015; // Hoch neigen
+    if (keys["KeyA"]) plane.rotation.z += 0.025; // Links rollen
+    if (keys["KeyD"]) plane.rotation.z -= 0.025; // Rechts rollen
     
     if (keys["Space"]) {
-      speed = Math.min(speed + 0.01, 2.5); 
+      speed = Math.min(speed + 0.02, 5.0); // Beschleunigen
     } else {
-      speed = Math.max(speed - 0.005, 0.4); 
+      speed = Math.max(speed - 0.01, 0.5); // Bremsen
     }
 
-    plane.rotation.y -= plane.rotation.z * 0.05;
+    // Automatische Kurveneinleitung beim Rollen
+    plane.rotation.y -= plane.rotation.z * 0.04;
 
-    // Kameraverfolgung von weit oben berechnen
+    // Kamera folgt starr in voreingestellter Vogelperspektive
     const relativeCameraOffset = new THREE.Vector3(0, CAM_HOEHE, CAM_ABSTAND);
     const cameraOffset = relativeCameraOffset.applyMatrix4(plane.matrixWorld);
     
     camera.position.copy(cameraOffset);
     camera.lookAt(plane.position);
 
+    // Live-Koordinaten ins HUD einspeisen
     elX.innerText = plane.position.x.toFixed(1);
     elY.innerText = plane.position.y.toFixed(1);
     elZ.innerText = plane.position.z.toFixed(1);
@@ -185,6 +209,7 @@ function animate() {
   renderer.render(scene, camera);
 }
 
+// Responsive Anpassung bei Bildschirmänderung
 window.addEventListener("resize", function() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
