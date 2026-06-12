@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<title>Flight Simulator FIX</title>
+<title>Flight Simulator Stable</title>
 
 <style>
 body {
@@ -20,15 +20,16 @@ body {
   background: rgba(0,0,0,0.6);
   padding: 10px;
   z-index: 10;
+  max-width: 90%;
 }
 </style>
 
 </head>
 <body>
 
-<div id="hud">Start...</div>
+<div id="hud">Init...</div>
 
-<!-- Three.js + Loader -->
+<!-- Three.js (stabile Version) -->
 <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/loaders/GLTFLoader.js"></script>
 
@@ -36,7 +37,6 @@ body {
 
 let scene, camera, renderer, model;
 const hud = document.getElementById("hud");
-
 let keys = {};
 
 init();
@@ -51,7 +51,7 @@ function init() {
     75,
     window.innerWidth / window.innerHeight,
     0.1,
-    2000
+    3000
   );
 
   camera.position.set(0, 5, 10);
@@ -63,45 +63,58 @@ function init() {
   // Licht
   scene.add(new THREE.AmbientLight(0xffffff, 0.6));
 
-  const light = new THREE.DirectionalLight(0xffffff, 1);
-  light.position.set(10, 20, 10);
-  scene.add(light);
+  const dir = new THREE.DirectionalLight(0xffffff, 1);
+  dir.position.set(10, 20, 10);
+  scene.add(dir);
 
-  // GRÜNER BODEN
+  // Boden
   const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(2000, 2000),
+    new THREE.PlaneGeometry(3000, 3000),
     new THREE.MeshLambertMaterial({ color: 0x00aa00 })
   );
   ground.rotation.x = -Math.PI / 2;
   scene.add(ground);
 
-  // KEY INPUT
+  // Controls
   document.addEventListener("keydown", e => keys[e.code] = true);
   document.addEventListener("keyup", e => keys[e.code] = false);
 
   window.addEventListener("resize", onResize);
 
-  // ===== GLB LOADER (DEIN BLOCK) =====
+  // ===== GLB LOADER =====
   const loader = new GLTFLoader();
 
   loader.load(
     "./1.glb",
 
-    function(gltf){
-        console.log("GLB LOADED");
-        model = gltf.scene;
-        scene.add(model);
-        hud.innerHTML = "✔ GELADEN";
+    function (gltf) {
+
+      console.log("✔ GLB LOADED");
+
+      model = gltf.scene;
+      scene.add(model);
+
+      model.position.set(0, 2, 0);
+
+      hud.innerHTML = "✔ Flugzeug geladen";
+
     },
 
-    function(xhr){
-        console.log("progress", xhr.loaded / xhr.total);
-        hud.innerHTML = "Lade: " + Math.round(xhr.loaded / xhr.total * 100) + "%";
+    function (xhr) {
+
+      let p = 0;
+      if (xhr.total) p = (xhr.loaded / xhr.total) * 100;
+
+      console.log("progress:", p);
+      hud.innerHTML = "Lade: " + Math.round(p) + "%";
+
     },
 
-    function(err){
-        console.error("GLB ERROR:", err);
-        hud.innerHTML = "❌ GLB ERROR (siehe Console)";
+    function (err) {
+
+      console.error("GLB ERROR:", err);
+      hud.innerHTML = "❌ GLB FEHLER (Console prüfen)";
+
     }
   );
 }
@@ -120,7 +133,6 @@ function animate() {
     if (keys["Space"]) model.position.y += 0.15;
     if (keys["ShiftLeft"]) model.position.y -= 0.15;
 
-    // Kamera folgt
     const offset = new THREE.Vector3(0, 4, 10);
     const camPos = model.position.clone().add(offset);
 
