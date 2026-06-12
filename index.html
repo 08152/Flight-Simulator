@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<title>Flight Simulator</title>
+<title>Flight Simulator FIX</title>
 
 <style>
 body {
@@ -22,16 +22,18 @@ body {
   z-index: 10;
 }
 </style>
+
 </head>
 <body>
 
-<div id="hud">Lade...</div>
+<div id="hud">Start...</div>
 
-<!-- ✅ DEINE CDN IMPORTS -->
+<!-- Three.js + Loader -->
 <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/loaders/GLTFLoader.js"></script>
 
 <script>
+
 let scene, camera, renderer, model;
 const hud = document.getElementById("hud");
 
@@ -73,47 +75,35 @@ function init() {
   ground.rotation.x = -Math.PI / 2;
   scene.add(ground);
 
-  // GLB LADEN
-loader.load("./1.glb", function (gltf) {
+  // KEY INPUT
+  document.addEventListener("keydown", e => keys[e.code] = true);
+  document.addEventListener("keyup", e => keys[e.code] = false);
 
-    model = gltf.scene;
-    scene.add(model);
+  window.addEventListener("resize", onResize);
 
-    // 🔥 AUTOMATISCH ZENTRIEREN
-    const box = new THREE.Box3().setFromObject(model);
-    const center = box.getCenter(new THREE.Vector3());
-
-    model.position.sub(center);
-
-    // 🔥 KAMERA RICHTIG SETZEN
-    camera.position.set(0, 2, 6);
-    camera.lookAt(0, 0, 0);
-
-    hud.innerHTML = "✔ Modell geladen";
-
-});
+  // ===== GLB LOADER (DEIN BLOCK) =====
+  const loader = new GLTFLoader();
 
   loader.load(
     "./1.glb",
-    (gltf) => {
-      model = gltf.scene;
-      model.position.set(0, 2, 0);
-      scene.add(model);
-      hud.innerHTML = "✔ Flugzeug geladen";
+
+    function(gltf){
+        console.log("GLB LOADED");
+        model = gltf.scene;
+        scene.add(model);
+        hud.innerHTML = "✔ GELADEN";
     },
-    (xhr) => {
-      hud.innerHTML = "Lade: " + Math.round((xhr.loaded / xhr.total) * 100) + "%";
+
+    function(xhr){
+        console.log("progress", xhr.loaded / xhr.total);
+        hud.innerHTML = "Lade: " + Math.round(xhr.loaded / xhr.total * 100) + "%";
     },
-    (err) => {
-      console.error(err);
-      hud.innerHTML = "❌ Fehler: 1.glb nicht gefunden";
+
+    function(err){
+        console.error("GLB ERROR:", err);
+        hud.innerHTML = "❌ GLB ERROR (siehe Console)";
     }
   );
-
-  document.addEventListener("keydown", (e) => keys[e.code] = true);
-  document.addEventListener("keyup", (e) => keys[e.code] = false);
-
-  window.addEventListener("resize", onResize);
 }
 
 function animate() {
@@ -146,6 +136,7 @@ function onResize() {
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 }
+
 </script>
 
 </body>
