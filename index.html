@@ -2,9 +2,9 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<title>3D Flight Sim - Golden City Version</title>
+<title>3D Flight Sim - Direct Load Version</title>
 <style>
-  body { margin: 0; overflow: hidden; background: #000; font-family: Arial, sans-serif; }
+  body { margin: 0; overflow: hidden; background: #53b4ff; font-family: Arial, sans-serif; }
   #hud {
     position: absolute; top: 10px; left: 10px;
     color: white; background: rgba(0,0,0,0.8);
@@ -17,14 +17,9 @@
   .error { color: #ff3333; }
 </style>
 
-<script type="importmap">
-  {
-    "imports": {
-      "three": "https://unpkg.com",
-      "three/addons/": "https://unpkg.com"
-    }
-  }
-</script>
+<!-- Direkte Skript-Ladung ohne Import-Map (Verhindert White/Black-Screen Abstürze) -->
+<script src="https://cloudflare.com"></script>
+<script src="https://jsdelivr.net"></script>
 </head>
 <body>
 
@@ -32,7 +27,6 @@
   <strong>Steuerung:</strong> W/S (Nase) | A/D (Rollen) | Leertaste (Gas)<br>
   <hr style="border:0; border-top:1px solid rgba(255,255,255,0.3); margin:5px 0;">
   
-  <!-- Statusanzeigen für deine beiden Original-Dateien -->
   <div class="status-line">Flugzeug (1.glb): <span id="statusPlane" class="loading">Lade...</span></div>
   <div class="status-line">Stadt (golden_city.glb): <span id="statusMap" class="loading">Lade...</span></div>
   
@@ -41,22 +35,19 @@
   X: <span id="posX">0.0</span> | Y: <span id="posY">0.0</span> | Z: <span id="posZ">0.0</span>
 </div>
 
-<script type="module">
-import * as THREE from 'three';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-
+<script>
 // ========================================================
-// EINSTELLUNGEN FÜR DEINE MODELLE
+// 1. SKALIERUNG FÜR DEINE GLBS (Hier bei Bedarf anpassen)
 // ========================================================
-const PLANE_SCALE = 1;      // Skalierung Flugzeug (erhöhen auf 5 oder 10, falls zu klein)
-const MAP_SCALE   = 2;      // Skalierung für Golden City (erhöhen auf 10 oder 20 für Riesenstadt)
+const PLANE_SCALE = 1.0;  // Falls dein Flugzeug winzig ist: Erhöhe auf 5 oder 10
+const MAP_SCALE   = 2.0;  // Skalierung für Golden City
 
-const CAM_HOEHE   = 35;     // Blickhöhe über dem Flugzeug
-const CAM_ABSTAND = -25;    // Abstand hinter dem Flugzeug
+const CAM_HOEHE   = 35;   // Blickhöhe weit über dem Flugzeug (Vogelperspektive)
+const CAM_ABSTAND = -25;  // Abstand hinter dem Flugzeug
 
-// Szene initialisieren
+// Szene Setup
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x53b4ff); // Fester blauer Himmel gegen schwarzen Bildschirm
+scene.background = new THREE.Color(0x53b4ff); // Sofort sichtbarer blauer Himmel
 scene.fog = new THREE.FogExp2(0x53b4ff, 0.001);
 
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 10000);
@@ -64,54 +55,54 @@ const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
 document.body.appendChild(renderer.domElement);
 
-// Helle Beleuchtung, damit die Texturen von Golden City leuchten
+// Sehr starke Beleuchtung, damit deine Original-Dateien nicht schwarz aussehen
 const ambientLight = new THREE.AmbientLight(0xffffff, 1.6);
 scene.add(ambientLight);
 
-const dirLight1 = new THREE.DirectionalLight(0xffffff, 1.4);
-dirLight1.position.set(200, 800, 200);
-scene.add(dirLight1);
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.4);
+dirLight.position.set(200, 800, 200);
+scene.add(dirLight);
 
-const loader = new GLTFLoader();
+// Verwende den globalen GLTFLoader aus dem direkten Skript-Import
+const loader = new THREE.GLTFLoader();
 
 // ========================================================
-// 2. GOLDEN CITY LOADER (Lädt golden_city.glb)
+// 2. GOLDEN CITY LOADER (golden_city.glb)
 // ========================================================
 let customMap = null;
 const statusMapEl = document.getElementById("statusMap");
 
 loader.load(
-  './golden_city.glb', // Jetzt mit deinem korrekten Dateinamen!
+  './golden_city.glb', 
   function (gltf) {
     customMap = gltf.scene;
     customMap.scale.set(MAP_SCALE, MAP_SCALE, MAP_SCALE);
-    customMap.position.set(0, 0, 0); // Die Stadt liegt im Zentrum der Welt
+    customMap.position.set(0, 0, 0); 
     
-    // Schatten- und Texturoptimierung für komplexe Städte
-    customMap.traverse((child) => {
+    customMap.traverse(function(child) {
       if (child.isMesh) {
         child.material.depthWrite = true;
       }
     });
 
     scene.add(customMap);
-    statusMapEl.innerText = "✔ Erfolgreich geladen!";
+    statusMapEl.innerText = "✔ Geladen!";
     statusMapEl.className = "success";
   },
   function (xhr) {
     if (xhr.total > 0) {
-      statusMapEl.innerText = `Lade: ${Math.round((xhr.loaded / xhr.total) * 100)}%`;
+      statusMapEl.innerText = "Lade: " + Math.round((xhr.loaded / xhr.total) * 100) + "%";
     }
   },
   function (error) {
-    console.error("Fehler bei golden_city.glb:", error);
-    statusMapEl.innerText = "⚠ golden_city.glb nicht gefunden!";
+    console.error(error);
+    statusMapEl.innerText = "⚠ Nicht gefunden!";
     statusMapEl.className = "error";
   }
 );
 
 // ========================================================
-// 3. FLUGZEUG LOADER (Lädt 1.glb)
+// 3. FLUGZEUG LOADER (1.glb)
 // ========================================================
 let plane = null;
 const statusPlaneEl = document.getElementById("statusPlane");
@@ -121,38 +112,38 @@ loader.load(
   function (gltf) {
     plane = gltf.scene;
     plane.scale.set(PLANE_SCALE, PLANE_SCALE, PLANE_SCALE);
-    plane.position.set(0, 80, 0); // Startet hoch über den Dächern von Golden City
+    plane.position.set(0, 80, 0); // Startet hoch über den Dächern
     
-    // Modell-Drehpunkt korrigieren
+    // Zentrierung des Modells gegen falsche Exporthöhen
     const box = new THREE.Box3().setFromObject(plane);
     const center = box.getCenter(new THREE.Vector3());
-    plane.children.forEach(child => {
+    plane.children.forEach(function(child) {
       child.position.x -= center.x;
       child.position.z -= center.z;
     });
 
     scene.add(plane);
-    statusPlaneEl.innerText = "✔ Erfolgreich geladen!";
+    statusPlaneEl.innerText = "✔ Geladen!";
     statusPlaneEl.className = "success";
   },
   function (xhr) {
     if (xhr.total > 0) {
-      statusPlaneEl.innerText = `Lade: ${Math.round((xhr.loaded / xhr.total) * 100)}%`;
+      statusPlaneEl.innerText = "Lade: " + Math.round((xhr.loaded / xhr.total) * 100) + "%";
     }
   },
   function (error) {
-    console.error("Fehler bei 1.glb:", error);
-    statusPlaneEl.innerText = "⚠ 1.glb nicht gefunden!";
+    console.error(error);
+    statusPlaneEl.innerText = "⚠ Nicht gefunden!";
     statusPlaneEl.className = "error";
   }
 );
 
 // ========================================================
-// 4. FLUGSTEUERUNG
+// 4. STEUERUNG
 // ========================================================
 const keys = {};
-document.addEventListener("keydown", e => keys[e.code] = true);
-document.addEventListener("keyup", e => keys[e.code] = false);
+document.addEventListener("keydown", function(e) { keys[e.code] = true; });
+document.addEventListener("keyup", function(e) { keys[e.code] = false; });
 
 let speed = 0.6;
 
@@ -166,28 +157,26 @@ function animate() {
   if (plane) {
     plane.translateZ(speed);
 
-    if (keys["KeyW"]) plane.rotation.x -= 0.015; // Nase runter
-    if (keys["KeyS"]) plane.rotation.x += 0.015; // Nase hoch
-    if (keys["KeyA"]) plane.rotation.z += 0.025; // Links rollen
-    if (keys["KeyD"]) plane.rotation.z -= 0.025; // Rechts rollen
+    if (keys["KeyW"]) plane.rotation.x -= 0.015; 
+    if (keys["KeyS"]) plane.rotation.x += 0.015; 
+    if (keys["KeyA"]) plane.rotation.z += 0.025; 
+    if (keys["KeyD"]) plane.rotation.z -= 0.025; 
     
     if (keys["Space"]) {
-      speed = Math.min(speed + 0.01, 2.5); // Gas
+      speed = Math.min(speed + 0.01, 2.5); 
     } else {
-      speed = Math.max(speed - 0.005, 0.4); // Mindesttempo
+      speed = Math.max(speed - 0.005, 0.4); 
     }
 
-    // Physikalische Kurvenneigung
     plane.rotation.y -= plane.rotation.z * 0.05;
 
-    // Kamera berechnen (schaut stabil von oben herab auf das Flugzeug)
+    // Kameraverfolgung von weit oben berechnen
     const relativeCameraOffset = new THREE.Vector3(0, CAM_HOEHE, CAM_ABSTAND);
     const cameraOffset = relativeCameraOffset.applyMatrix4(plane.matrixWorld);
     
     camera.position.copy(cameraOffset);
     camera.lookAt(plane.position);
 
-    // Live-Koordinaten ins HUD eintragen
     elX.innerText = plane.position.x.toFixed(1);
     elY.innerText = plane.position.y.toFixed(1);
     elZ.innerText = plane.position.z.toFixed(1);
@@ -196,7 +185,7 @@ function animate() {
   renderer.render(scene, camera);
 }
 
-window.addEventListener("resize", () => {
+window.addEventListener("resize", function() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
