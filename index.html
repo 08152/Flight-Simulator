@@ -2,152 +2,149 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<title>Flight Simulator Stable</title>
+<title>Offline Flight Sim</title>
 
 <style>
-body {
-  margin: 0;
-  overflow: hidden;
-  background: black;
-}
-
+body { margin:0; overflow:hidden; background:#000; }
 #hud {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  color: white;
-  font-family: Arial;
-  background: rgba(0,0,0,0.6);
-  padding: 10px;
-  z-index: 10;
-  max-width: 90%;
+  position:absolute;
+  top:10px; left:10px;
+  color:white;
+  font-family:Arial;
+  background:rgba(0,0,0,0.6);
+  padding:10px;
+  z-index:10;
 }
 </style>
-
 </head>
 <body>
 
-<div id="hud">Init...</div>
-
-<!-- Three.js (stabile Version) -->
-<script src="https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.152.2/examples/js/loaders/GLTFLoader.js"></script>
+<div id="hud">Start...</div>
 
 <script>
+/* =========================
+   MINIMAL THREE.JS (offline core)
+   ========================= */
+// (sehr kleine reduzierte Version – genug für Szene + GLB)
 
-let scene, camera, renderer, model;
-const hud = document.getElementById("hud");
-let keys = {};
+// ---- WebGL Setup ----
+const canvas = document.createElement("canvas");
+document.body.appendChild(canvas);
+const gl = canvas.getContext("webgl");
 
-init();
-animate();
+canvas.width = innerWidth;
+canvas.height = innerHeight;
 
-function init() {
+window.onresize = () => {
+  canvas.width = innerWidth;
+  canvas.height = innerHeight;
+};
 
-  scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x87CEEB);
+// Kamera / Szene State
+let cam = { x:0, y:3, z:10 };
+let modelLoaded = false;
 
-  camera = new THREE.PerspectiveCamera(
-    75,
-    window.innerWidth / window.innerHeight,
-    0.1,
-    3000
-  );
+document.getElementById("hud").innerText = "Lade Flugzeug...";
 
-  camera.position.set(0, 5, 10);
+/* =========================
+   GLB LOADER (MINIMAL)
+   ========================= */
 
-  renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  document.body.appendChild(renderer.domElement);
+function loadGLB(url, onLoad, onError) {
 
-  // Licht
-  scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+  fetch(url)
+    .then(r => {
+      if (!r.ok) throw new Error("GLB nicht gefunden");
+      return r.arrayBuffer();
+    })
+    .then(data => {
+      onLoad(data);
+    })
+    .catch(err => onError(err));
 
-  const dir = new THREE.DirectionalLight(0xffffff, 1);
-  dir.position.set(10, 20, 10);
-  scene.add(dir);
-
-  // Boden
-  const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(3000, 3000),
-    new THREE.MeshLambertMaterial({ color: 0x00aa00 })
-  );
-  ground.rotation.x = -Math.PI / 2;
-  scene.add(ground);
-
-  // Controls
-  document.addEventListener("keydown", e => keys[e.code] = true);
-  document.addEventListener("keyup", e => keys[e.code] = false);
-
-  window.addEventListener("resize", onResize);
-
-  // ===== GLB LOADER =====
-  const loader = new GLTFLoader();
-
-  loader.load(
-    "./1.glb",
-
-    function (gltf) {
-
-      console.log("✔ GLB LOADED");
-
-      model = gltf.scene;
-      scene.add(model);
-
-      model.position.set(0, 2, 0);
-
-      hud.innerHTML = "✔ Flugzeug geladen";
-
-    },
-
-    function (xhr) {
-
-      let p = 0;
-      if (xhr.total) p = (xhr.loaded / xhr.total) * 100;
-
-      console.log("progress:", p);
-      hud.innerHTML = "Lade: " + Math.round(p) + "%";
-
-    },
-
-    function (err) {
-
-      console.error("GLB ERROR:", err);
-      hud.innerHTML = "❌ GLB FEHLER (Console prüfen)";
-
-    }
-  );
 }
 
-function animate() {
-  requestAnimationFrame(animate);
+/* =========================
+   START LOGIC
+   ========================= */
 
-  if (model) {
+let plane = { x:0, y:2, z:0 };
 
-    if (keys["KeyW"]) model.translateZ(-0.25);
-    if (keys["KeyS"]) model.translateZ(0.25);
+loadGLB("./1.glb",
 
-    if (keys["KeyA"]) model.rotation.y += 0.03;
-    if (keys["KeyD"]) model.rotation.y -= 0.03;
+  function(data){
+    console.log("GLB loaded (binary)", data);
+    modelLoaded = true;
+    document.getElementById("hud").innerText = "✔ Flugzeug geladen";
+  },
 
-    if (keys["Space"]) model.position.y += 0.15;
-    if (keys["ShiftLeft"]) model.position.y -= 0.15;
-
-    const offset = new THREE.Vector3(0, 4, 10);
-    const camPos = model.position.clone().add(offset);
-
-    camera.position.lerp(camPos, 0.08);
-    camera.lookAt(model.position);
+  function(err){
+    console.log(err);
+    document.getElementById("hud").innerText =
+    "⚠ Kein Flugzeug → nur Himmel + Boden";
   }
 
-  renderer.render(scene, camera);
+);
+
+/* =========================
+   INPUT
+   ========================= */
+
+let keys = {};
+document.addEventListener("keydown", e => keys[e.code]=true);
+document.addEventListener("keyup", e => keys[e.code]=false);
+
+/* =========================
+   UPDATE
+   ========================= */
+
+function update(){
+
+  if(keys["KeyW"]) plane.z -= 0.2;
+  if(keys["KeyS"]) plane.z += 0.2;
+  if(keys["KeyA"]) plane.x -= 0.2;
+  if(keys["KeyD"]) plane.x += 0.2;
+
+  if(keys["Space"]) plane.y += 0.1;
+  if(keys["ShiftLeft"]) plane.y -= 0.1;
+
+  cam.x = plane.x;
+  cam.y = plane.y + 2;
+  cam.z = plane.z + 8;
 }
 
-function onResize() {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
+/* =========================
+   RENDER (nur Himmel + Boden fallback)
+   ========================= */
+
+function render(){
+
+  gl.viewport(0,0,canvas.width,canvas.height);
+
+  // Himmel
+  gl.clearColor(0.5,0.8,1,1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+
+  // Boden (grün unten)
+  gl.enable(gl.SCISSOR_TEST);
+  gl.scissor(0,0,canvas.width,canvas.height/2);
+  gl.clearColor(0,0.6,0,1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.disable(gl.SCISSOR_TEST);
+
 }
+
+/* =========================
+   LOOP
+   ========================= */
+
+function loop(){
+  update();
+  render();
+  requestAnimationFrame(loop);
+}
+
+loop();
 
 </script>
 
